@@ -22,3 +22,6 @@ repositories:
   custom/smart_bot_driver:
     type: git
     url: https://github.com/MonkeYKonG/ROB1-AC-groupname.git
+  worlds/blackfoot_world:
+    type: git
+    url: https://github.com/blackfoot-makers/labrob
