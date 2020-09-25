@@ -2,11 +2,11 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'py_stupidobstacleavoidance'
+package_name = 'workshop'
 
 setup(
     name=package_name,
-    version='0.0.0',
+    version='1.0.0',
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -18,12 +18,12 @@ setup(
     zip_safe=True,
     maintainer='alexis',
     maintainer_email='alexis1.craye@epitech.eu',
-    description='TODO: Package description',
+    description='Node to move forward and turn if a wall is detected on the trajectory',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'the_smartest_bot_i_ve_ever_seen = py_stupidobstacleavoidance.my_smart_bot:main',
+            'my_smart_bot = workshop.my_smart_bot:main',
         ],
     },
 )

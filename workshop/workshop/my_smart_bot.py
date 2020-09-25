@@ -1,15 +1,13 @@
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 
 
 class TheSmartestBotIveEverSeen(Node):
-
     def __init__(self):
-        super().__init__('the_smartest_bot_i_ve_ever_seen')
+        super().__init__('my_smart_bot')
         self.subscription = self.create_subscription(
             LaserScan,
             'scan',
@@ -25,8 +23,8 @@ class TheSmartestBotIveEverSeen(Node):
         self.on_rotation = False
 
     def ranges_is_closer(self, ranges, min_range=0.5):
-        for range in ranges:
-            if range < min_range:
+        for r in ranges:
+            if r < min_range:
                 return True
         return False
 
@@ -64,17 +62,10 @@ class TheSmartestBotIveEverSeen(Node):
         self.publisher.publish(msg)
 
 
-
 def main(args=None):
     rclpy.init(args=args)
-
     minimal_subscriber = TheSmartestBotIveEverSeen()
-
     rclpy.spin(minimal_subscriber)
-
-    # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
     minimal_subscriber.destroy_node()
     rclpy.shutdown()
 

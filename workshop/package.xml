@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>py_stupidobstacleavoidance</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <name>workshop</name>
+  <version>1.0.0</version>
+  <description>Node to move forward and turn if a wall is detected on the trajectory</description>
   <maintainer email="alexis1.craye@epitech.eu">alexis</maintainer>
   <license>TODO: License declaration</license>
 

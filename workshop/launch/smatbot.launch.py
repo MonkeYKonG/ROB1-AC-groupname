@@ -29,8 +29,8 @@ def generate_launch_description():
             launch_arguments={'use_sim_time': use_sim_time}.items(),
         ),
         Node(
-            package='py_stupidobstacleavoidance',
-            node_executable='the_smartest_bot_i_ve_ever_seen',
+            package='workshop',
+            node_executable='my_smart_bot',
             node_name='my_smart_bot'
         )
     ])
