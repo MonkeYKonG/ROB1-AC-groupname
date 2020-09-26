@@ -26,13 +26,13 @@ def generate_launch_description():
             cmd=['gazebo', '--verbose', world, '-s', 'libgazebo_ros_init.so'],
             output='screen'),
 
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([launch_file_dir, '/robot_state_publisher.launch.py']),
-            launch_arguments={'use_sim_time': use_sim_time}.items(),
-        ),
-        Node(
-            package='py_stupidobstacleavoidance',
-            executable='the_smartest_bot_i_ve_ever_seen',
-            name='my_smart_bot'
-        )
+        # IncludeLaunchDescription(
+        #     PythonLaunchDescriptionSource([launch_file_dir, '/robot_state_publisher.launch.py']),
+        #     launch_arguments={'use_sim_time': use_sim_time}.items(),
+        # ),
+        # Node(
+        #     package='py_stupidobstacleavoidance',
+        #     executable='the_smartest_bot_i_ve_ever_seen',
+        #     name='my_smart_bot'
+        # )
     ])
