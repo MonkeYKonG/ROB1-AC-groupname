@@ -7,6 +7,10 @@ from geometry_msgs.msg import Twist
 
 
 class TheSmartestBotIveEverSeen(Node):
+    STATE_SEARCH_WALL = 0
+    STATE_ROTATION_LEFT = 1
+    STATE_ROTATION_RIGHT = 2
+    STATE_FOLLOW = 3
 
     def __init__(self):
         super().__init__('the_smartest_bot_i_ve_ever_seen')
@@ -18,11 +22,10 @@ class TheSmartestBotIveEverSeen(Node):
         self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.publish)
-        
-        self.linear_factor = 0.3
+        self.linear_factor = 0.0
         self.angular_factor = 0.0
         self.sensor_angular_range = 30
-        self.on_rotation = False
+        self.state = self.STATE_SEARCH_WALL
 
     def ranges_is_closer(self, ranges, min_range=0.5):
         for range in ranges:
@@ -39,19 +42,46 @@ class TheSmartestBotIveEverSeen(Node):
             angular_return = 1.0
         return angular_return
 
+    def search_for_wall(self, sensor_data):
+        if sensor_data.ranges[0] < 0.4:
+            self.state = self.STATE_ROTATION_LEFT
+            self.get_logger().info(f'{sensor_data.ranges[315]} - {sensor_data.ranges[0]} - {sensor_data.ranges[45]}')
+        else:
+            dist_to_reach = sensor_data.ranges[0] - 0.4
+            self.linear_factor = 1.0 * (1 if dist_to_reach > 1 else dist_to_reach)
+
+    def rotate_to_left(self, sensor_data):
+        diff = abs(sensor_data.ranges[45] - sensor_data.ranges[135])
+        self.angular_factor = 0.1
+        self.get_logger().info(f'{sensor_data.ranges[45]} - {sensor_data.ranges[90]} - {sensor_data.ranges[135]} = {diff}')
+
+    def rotate_to_right(self, sensor_data):
+        pass
+
     def listener_callback(self, sensor_data):
         sensor_data_len = len(sensor_data.ranges)
         half_angular_range = int(self.sensor_angular_range / 2)
-        ranges = sensor_data.ranges[sensor_data_len - half_angular_range:] + sensor_data.ranges[:half_angular_range]
-        if self.ranges_is_closer(ranges):
-            if self.on_rotation is False:
-                self.linear_factor = 0.0
-                self.angular_factor = self.compute_angular_factor(ranges)
-                self.on_rotation = True
-        elif self.on_rotation:
-            self.linear_factor = 0.3
-            self.angular_factor = 0.0
-            self.on_rotation = False
+        front_ranges = sensor_data.ranges[sensor_data_len - half_angular_range:] + sensor_data.ranges[:half_angular_range]
+        front_right_ranges = sensor_data.ranges[half_angular_range:90-half_angular_range]
+        right_ranges = sensor_data.ranges[90-half_angular_range:90+half_angular_range]
+        right_bottom_ranges = sensor_data.ranges[90+half_angular_range:180-half_angular_range]
+        front_range_closer = self.ranges_is_closer(front_ranges)
+        front_right_range_closer = self.ranges_is_closer(front_right_ranges)
+        right_range_closer = self.ranges_is_closer(right_ranges)
+        right_bottom_range_closer = self.ranges_is_closer(right_bottom_ranges)
+
+        self.linear_factor = 0.0
+        self.angular_factor = 0.0
+        #self.get_logger().info('salut')
+
+        if self.state == self.STATE_SEARCH_WALL:
+            self.search_for_wall(sensor_data)
+        elif self.state == self.STATE_ROTATION_LEFT:
+            self.rotate_to_left(sensor_data)
+        elif self.state == self.STATE_ROTATION_RIGHT:
+            self.rotate_to_right(sensor_data)
+        else:
+            pass
 
     def publish(self):
         msg = Twist()
