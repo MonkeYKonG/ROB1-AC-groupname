@@ -43,7 +43,14 @@ class Point:
         return Point(self.x - other.x, self.y - other.y)
 
     def __mul__(self, other):
+        if isinstance(other, (int, float)):
+            return Point(self.x * other, self.y * other)
         return Point(self.x * other.x, self.y * other.y)
+
+    def __truediv__(self, other):
+        if isinstance(other, (int, float)):
+            return Point(self.x / other, self.y / other)
+        return Point(self.x / other.x, self.y / other.y)
 
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
@@ -92,6 +99,14 @@ class Wall:
     def dist(self):
         return (self.end_point - self.begin_point).dist
 
+    @property
+    def direction(self):
+        return (self.end_point - self.begin_point).normalized
+
+    @property
+    def middle(self):
+        return self.begin_point + self.direction * self.dist / 2
+
 
 class WallFollower(Node):
     MAX_LINEAR = 0.1
@@ -131,44 +146,15 @@ class WallFollower(Node):
     def __log_change_state(self, previous_state, new_state):
         self.get_logger().info(f'State {previous_state} finish -> Start state {new_state}')
 
-    def __get_continuous_points(self, closest, ranges):
-        start_point = get_position(closest, self._current_ranges[closest])
-        wall_direction = None
-        points = []
-        for i in ranges:
-            dist = self._current_ranges[i]
-            if dist > 12.0:
-                self.get_logger().info(f'To far {dist}')
-                break
-            point_position = get_position(i, dist)
-            direction = point_position - start_point
-            if wall_direction is None:
-                wall_direction = direction
-            if wall_direction.normalized != direction.normalized:
-                self.get_logger().info(f'BREAK! {i} -> {wall_direction.normalized} --> {direction.normalized}')
-                # break
-            points.append(i)
-        return points
-
-    def __get_wall_points(self, closest):
-        left_points = self.__get_continuous_points(closest, range(closest)[::-1])
-        right_points = self.__get_continuous_points(closest, range(closest + 1, 360))
-        self.get_logger().info(f'Let points: {left_points}')
-        self.get_logger().info(f'Right points: {right_points}')
-        return left_points + [closest] + right_points
-
     def __are_close_directions(self, direction, last_direction, dist) -> bool:
         direction_angle = get_angle(direction)
         last_direction_angle = get_angle(last_direction)
-        self.get_logger().info(f'angle {direction_angle} -> last_angle: {last_direction_angle}')
-        if abs(direction_angle - last_direction_angle) < 0.5:
+        if abs(direction_angle - last_direction_angle) < 0.5 if dist > 2 else 8:
             return True
-        self.get_logger().info(f'dist {dist}')
         return False
 
     def __valid_found_on_suit(self, points, last_direction, begin_point):
         for point in points:
-            self.get_logger().info(f'{point}')
             direction = (point - begin_point).normalized
             if self.__are_close_directions(direction, last_direction, (point - begin_point).dist):
                 return True
@@ -180,22 +166,17 @@ class WallFollower(Node):
         walls = []
         begin_index = 0
         last_direction = (points[1] - points[begin_index]).normalized
-        for index, point in enumerate(points[2:]):
+        for index, point in list(enumerate(points))[2:]:
             direction = (point - points[begin_index]).normalized
-            # self.get_logger().info(f'd: {direction}')
             if last_direction is not None and not self.__are_close_directions(direction, last_direction, (point - points[begin_index]).dist):
-                self.get_logger().info(f'PREDICTION -> {index} -> {point}')
                 if not self.__valid_found_on_suit(points[index + 1:index + 6], last_direction, points[begin_index]):
-                    self.get_logger(f'ALL FAIL -> WALL CORNER FOUND')
-                    walls.append(points[:index])
+                    walls.append(Wall(points[begin_index], points[index]))
                     begin_index = index
                     last_direction = None
-                    self.get_logger().info(f'END PREDICTION')
                     continue
-                self.get_logger().info(f'END PREDICTION')
             last_direction = direction
         if begin_index != len(points) - 1:
-            walls.append(points[begin_index:])
+            walls.append(Wall(points[begin_index], points[len(points) - 1]))
         return walls
 
     def __get_suits_of_points(self):
@@ -223,61 +204,16 @@ class WallFollower(Node):
         for points in points_suits:
             walls += self.__interpret_suit_of_points(points)
         self.get_logger().info(f'Found {len(walls)} walls')
-        exit(666)
-        # walls = []
-        # current_wall = []
-        # for index, r in enumerate(self._current_ranges):
-        #     self.__interpret_point(index, r current_wall, walls)
-        # cur_direction = (cur_pos - point).normalized
-        # if point != cur_pos:
-        #     if base_direction:
-        #         dir_diff = base_direction - cur_direction
-        #         if abs(dir_diff.x) > 0.15 or abs(dir_diff.y) > 0.15:
-        #             self.get_logger().info(f'To big diff:\n{dir_diff}\n{base_direction}\n{cur_direction}\n')
-        #             point = None
-        #             base_direction = None
-        #             if len(current_wall):
-        #                 walls.append(Wall(current_wall[0], current_wall[len(current_wall) - 1]))
-        #                 current_wall = []
-        #             continue
-        #     base_direction = cur_direction
-        if len(current_wall):
-            walls.append(Wall(current_wall[0], current_wall[len(current_wall) - 1]))
-        jumpline = '\n'
-        self.get_logger().info(f'{len(walls)} --\n{jumpline.join((str(w) for w in walls))}')
+        self.get_logger().info(f'wall: {walls[0]}')
+        self.get_logger().info(f'middle: {walls[0].middle}')
+        self.get_logger().info(f'direction: {walls[0].direction}')
         exit(1)
-        closest = get_closest_range_index(self._current_ranges)
-        self.get_logger().info(f'CLOSEST! -> {closest} - {self._current_ranges[closest]}')
-        wall = self.__get_wall_points(closest)
-        exit(1)
-        degrees_to_rotate = closest if closest < 90 else 360 - closest
-        self.get_logger().info(f'{closest}')
-        if degrees_to_rotate > 0:
-            self._cur_angular = self.MAX_LINEAR * (1 if closest < 90 else -1)
-        else:
-            self._cur_angular = self.MIN_ANGULAR
-            if self._current_ranges[closest] > self._safety_distance:
-                self._cur_linear = self.MAX_LINEAR
-            else:
-                self._cur_linear = self.MIN_LINEAR
-                self._cur_state = self.STATE_FOLLOW_WALL
-                self.__log_change_state(self.STATE_SEARCH_WALL, self.STATE_FOLLOW_WALL)
 
     def __move_to_wall(self):
         pass
 
     def __follow_wall(self):
-        self.get_logger().info(f'Step follow wall, {self._current_ranges[80:90]}')
-        right_ranges = self._current_ranges[80:90]
-        closest_right = get_closest_range_index(right_ranges)
-        front_ranges = self._current_ranges[:10]
-        closest_front = get_closest_range_index(front_ranges)
-
-        if right_ranges[closest_right] < self._safety_distance:
-            self.get_logger().info('Wall on right!')
-        else:
-            self.get_logger().info('Wall no on right')
-            self.get_logger().info(f'{self._current_ranges[:80]}')
+        pass
 
     def __publish(self):
         twist = Twist()
