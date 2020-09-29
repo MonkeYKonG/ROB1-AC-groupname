@@ -2,7 +2,9 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 import math
+import numpy as np
 
 
 def get_closest_range_index(ranges):
@@ -23,6 +25,10 @@ def get_position(angle, dist):
     x = math.cos(math.radians(angle)) * dist
     y = math.sin(math.radians(angle)) * dist
     return Point(x, y)
+
+
+def get_angle(direction):
+    return math.degrees(np.arccos(np.dot([0, 1], direction.to_array())))
 
 
 class Point:
@@ -50,10 +56,17 @@ class Point:
 
     @property
     def normalized(self):
-        normalizer = math.sqrt(self.x**2 + self.y**2)
+        normalizer = self.dist
         if normalizer == 0:
             return Point(0, 0)
         return Point(self.x / normalizer, self.y / normalizer)
+
+    @property
+    def dist(self):
+        return math.sqrt(self.x ** 2 + self.y ** 2)
+
+    def to_array(self) -> list:
+        return [self.x, self.y]
 
 
 class Wall:
@@ -62,7 +75,7 @@ class Wall:
         self._end_point = end_point
 
     def __str__(self):
-        return f'Wall<begin_point: {self.begin_point}, end_point: {self.end_point}>'
+        return f'Wall<begin_point: {self.begin_point}, end_point: {self.end_point}, dist: {self.dist}>'
 
     def __repr__(self):
         return str(self)
@@ -74,6 +87,10 @@ class Wall:
     @property
     def end_point(self):
         return self._end_point
+
+    @property
+    def dist(self):
+        return (self.end_point - self.begin_point).dist
 
 
 class WallFollower(Node):
@@ -96,9 +113,9 @@ class WallFollower(Node):
             self.scan_sensor_callback,
             rclpy.qos.qos_profile_sensor_data)
         self.cmd_vel_raw_sub = self.create_subscription(
-            Twist,
-            'cmd_vel_raw',
-            self.cmd_vel_row_callback,
+            Odometry,
+            'odom',
+            self.odom_callback,
             rclpy.qos.QoSProfile(depth=10))
         self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.update_timer = self.create_timer(0.010, self.update_callback)
@@ -140,35 +157,94 @@ class WallFollower(Node):
         self.get_logger().info(f'Right points: {right_points}')
         return left_points + [closest] + right_points
 
-    def __search_for_wall(self):
-        point = None
-        base_direction = None
-        can_store_direction = False
+    def __are_close_directions(self, direction, last_direction, dist) -> bool:
+        direction_angle = get_angle(direction)
+        last_direction_angle = get_angle(last_direction)
+        self.get_logger().info(f'angle {direction_angle} -> last_angle: {last_direction_angle}')
+        if abs(direction_angle - last_direction_angle) < 0.5:
+            return True
+        self.get_logger().info(f'dist {dist}')
+        return False
+
+    def __valid_found_on_suit(self, points, last_direction, begin_point):
+        for point in points:
+            self.get_logger().info(f'{point}')
+            direction = (point - begin_point).normalized
+            if self.__are_close_directions(direction, last_direction, (point - begin_point).dist):
+                return True
+        return False
+
+    def __interpret_suit_of_points(self, points):
+        if len(points) == 1:
+            return points
         walls = []
-        current_wall = []
+        begin_index = 0
+        last_direction = (points[1] - points[begin_index]).normalized
+        for index, point in enumerate(points[2:]):
+            direction = (point - points[begin_index]).normalized
+            # self.get_logger().info(f'd: {direction}')
+            if last_direction is not None and not self.__are_close_directions(direction, last_direction, (point - points[begin_index]).dist):
+                self.get_logger().info(f'PREDICTION -> {index} -> {point}')
+                if not self.__valid_found_on_suit(points[index + 1:index + 6], last_direction, points[begin_index]):
+                    self.get_logger(f'ALL FAIL -> WALL CORNER FOUND')
+                    walls.append(points[:index])
+                    begin_index = index
+                    last_direction = None
+                    self.get_logger().info(f'END PREDICTION')
+                    continue
+                self.get_logger().info(f'END PREDICTION')
+            last_direction = direction
+        if begin_index != len(points) - 1:
+            walls.append(points[begin_index:])
+        return walls
+
+    def __get_suits_of_points(self):
+        suits = []
+        cur_suit = []
         for index, r in enumerate(self._current_ranges):
             if r > 12:
-                point = None
-                base_direction = None
-                can_store_direction = False
-                if len(current_wall):
-                    walls.append(Wall(current_wall[0], current_wall[len(current_wall) - 1]))
-                    current_wall = []
+                if len(cur_suit):
+                    suits.append(cur_suit)
+                    cur_suit = []
                 continue
-            cur_pos = get_position(index, self._current_ranges[index])
-            current_wall.append(cur_pos)
-            if point and base_direction is None and can_store_direction is True:
-                base_direction = cur_pos - point
-            if point and can_store_direction is False:
-                can_store_direction = True
-            if point is None:
-                point = cur_pos
-            diff = cur_pos - point
-            if point and base_direction:
-                dir_diff = diff.normalized - base_direction.normalized
-                if abs(dir_diff.x) > 0.1 or abs(dir_diff.y) > 0.1:
-                    self.get_logger().info(f'Strange dir_diff found -> {dir_diff}')
-        self.get_logger().info(f'{len(walls)} -- {walls}')
+            position = get_position(index, r)
+            cur_suit.append((index, Point(position.x, position.y)))
+        if len(cur_suit):
+            if len(suits) and suits[0][0][0] == 0:
+                suits[0] = cur_suit + suits[0]
+            else:
+                suits.append(cur_suit)
+        return [[t[1] for t in s] for s in suits]
+
+    def __search_for_wall(self):
+        points_suits = self.__get_suits_of_points()
+        self.get_logger().info(f'{len(points_suits)}')
+        walls = []
+        for points in points_suits:
+            walls += self.__interpret_suit_of_points(points)
+        self.get_logger().info(f'Found {len(walls)} walls')
+        exit(666)
+        # walls = []
+        # current_wall = []
+        # for index, r in enumerate(self._current_ranges):
+        #     self.__interpret_point(index, r current_wall, walls)
+        # cur_direction = (cur_pos - point).normalized
+        # if point != cur_pos:
+        #     if base_direction:
+        #         dir_diff = base_direction - cur_direction
+        #         if abs(dir_diff.x) > 0.15 or abs(dir_diff.y) > 0.15:
+        #             self.get_logger().info(f'To big diff:\n{dir_diff}\n{base_direction}\n{cur_direction}\n')
+        #             point = None
+        #             base_direction = None
+        #             if len(current_wall):
+        #                 walls.append(Wall(current_wall[0], current_wall[len(current_wall) - 1]))
+        #                 current_wall = []
+        #             continue
+        #     base_direction = cur_direction
+        if len(current_wall):
+            walls.append(Wall(current_wall[0], current_wall[len(current_wall) - 1]))
+        jumpline = '\n'
+        self.get_logger().info(f'{len(walls)} --\n{jumpline.join((str(w) for w in walls))}')
         exit(1)
         closest = get_closest_range_index(self._current_ranges)
         self.get_logger().info(f'CLOSEST! -> {closest} - {self._current_ranges[closest]}')
@@ -212,8 +288,9 @@ class WallFollower(Node):
     def scan_sensor_callback(self, sensor_data):
         self._current_ranges = sensor_data.ranges
 
-    def cmd_vel_row_callback(self, twist):
-        self.get_logger().info(f'CMD VEL ROW -> {twist}')
+    def odom_callback(self, odometry):
+        return
+        # self.get_logger().info(f'CMD VEL ROW -> {odometry}')
 
     def update_callback(self):
         if self._current_ranges is not None:
