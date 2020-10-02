@@ -28,7 +28,24 @@ def get_position(angle, dist):
 
 
 def get_angle(direction):
-    return math.degrees(np.arccos(np.dot([0, 1], direction.to_array())))
+    return math.degrees(np.arccos(np.dot([1, 0], direction.to_array())))
+
+
+def rotate_vector(vector, angle):
+    radian = math.radians(angle)
+    cos = math.cos(radian)
+    sin = math.sin(radian)
+    x = vector.x * cos + vector.y * sin
+    y = vector.x * -sin + vector.y * cos
+    return Point(x, y)
+
+
+def are_close_directions(direction, last_direction, dist) -> bool:
+    direction_angle = get_angle(direction)
+    last_direction_angle = get_angle(last_direction)
+    if abs(direction_angle - last_direction_angle) < 0.5 if dist > 2 else 8:
+        return True
+    return False
 
 
 class Point:
@@ -75,6 +92,11 @@ class Point:
     def to_array(self) -> list:
         return [self.x, self.y]
 
+    def rotate(self, angle):
+        new_point = rotate_vector(self, angle)
+        self.x = new_point.x
+        self.y = new_point.y
+
 
 class Wall:
     def __init__(self, begin_point, end_point):
@@ -107,6 +129,14 @@ class Wall:
     def middle(self):
         return self.begin_point + self.direction * self.dist / 2
 
+    def dist_to_origin(self) -> float:
+        lambda_s = self.begin_point.dist * self.end_point.dist / self.dist**2
+        if lambda_s >= 1:
+            return self.end_point
+        elif lambda_s <= 0:
+            return self.begin_point
+        return self.begin_point + self.direction * lambda_s
+
 
 class WallFollower(Node):
     MAX_LINEAR = 0.1
@@ -133,30 +163,33 @@ class WallFollower(Node):
             self.odom_callback,
             rclpy.qos.QoSProfile(depth=10))
         self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
-        self.update_timer = self.create_timer(0.010, self.update_callback)
+        self.update_delay = 0.010
+        self.update_timer = self.create_timer(self.update_delay, self.update_callback)
 
         """ Private attributes """
         self._current_ranges = None
+        self._location = None
+        self._rotation = None
+        self._target_location = None
+        self._target_rotation = None
         self._cur_linear = self.MIN_LINEAR
         self._cur_angular = self.MIN_ANGULAR
         self._cur_state = self.STATE_SEARCH_WALL
 
-        self._safety_distance = 0.3
+        self._safety_distance = 0.5
+
+    def __reset_location_and_rotation(self):
+        self._location = Point(0, 0)
+        self._rotation = 0.0
 
     def __log_change_state(self, previous_state, new_state):
         self.get_logger().info(f'State {previous_state} finish -> Start state {new_state}')
 
-    def __are_close_directions(self, direction, last_direction, dist) -> bool:
-        direction_angle = get_angle(direction)
-        last_direction_angle = get_angle(last_direction)
-        if abs(direction_angle - last_direction_angle) < 0.5 if dist > 2 else 8:
-            return True
-        return False
-
-    def __valid_found_on_suit(self, points, last_direction, begin_point):
+    @staticmethod
+    def __valid_found_on_suit(points, last_direction, begin_point):
         for point in points:
             direction = (point - begin_point).normalized
-            if self.__are_close_directions(direction, last_direction, (point - begin_point).dist):
+            if are_close_directions(direction, last_direction, (point - begin_point).dist):
                 return True
         return False
 
@@ -168,7 +201,8 @@ class WallFollower(Node):
         last_direction = (points[1] - points[begin_index]).normalized
         for index, point in list(enumerate(points))[2:]:
             direction = (point - points[begin_index]).normalized
-            if last_direction is not None and not self.__are_close_directions(direction, last_direction, (point - points[begin_index]).dist):
+            if last_direction is not None and not are_close_directions(direction, last_direction,
+                                                                              (point - points[begin_index]).dist):
                 if not self.__valid_found_on_suit(points[index + 1:index + 6], last_direction, points[begin_index]):
                     walls.append(Wall(points[begin_index], points[index]))
                     begin_index = index
@@ -197,23 +231,71 @@ class WallFollower(Node):
                 suits.append(cur_suit)
         return [[t[1] for t in s] for s in suits]
 
-    def __search_for_wall(self):
+    def __get_walls(self):
         points_suits = self.__get_suits_of_points()
-        self.get_logger().info(f'{len(points_suits)}')
+        # self.get_logger().info(f'{len(points_suits)}')
         walls = []
         for points in points_suits:
             walls += self.__interpret_suit_of_points(points)
-        self.get_logger().info(f'Found {len(walls)} walls')
-        self.get_logger().info(f'wall: {walls[0]}')
-        self.get_logger().info(f'middle: {walls[0].middle}')
-        self.get_logger().info(f'direction: {walls[0].direction}')
-        exit(1)
+        return walls
+
+    @staticmethod
+    def __get_longer_wall(walls):
+        longer_wall = None
+        for wall in walls:
+            if longer_wall is None or longer_wall.dist < wall.dist:
+                longer_wall = wall
+        return longer_wall
+
+    @staticmethod
+    def __get_closer_wall(walls):
+        closer_wall = None
+        for wall in walls:
+            if closer_wall is None or closer_wall.dist_to_origin() > wall.dist_to_origin():
+                closer_wall = wall
+        return closer_wall
+
+    def __search_for_wall(self):
+        best_wall = self.__get_longer_wall(self.__get_walls())
+        self.__reset_location_and_rotation()
+        self._target_location = best_wall.middle + rotate_vector(best_wall.direction, -90) * self._safety_distance
+        self._target_rotation = math.radians(get_angle(self._target_location.normalized))
+        self.__log_change_state(self._cur_state, self.STATE_MOVE_TO_WALL)
+        self._cur_state = self.STATE_MOVE_TO_WALL
 
     def __move_to_wall(self):
-        pass
+        if self._rotation != self._target_rotation:
+            diff = self._target_rotation - self._rotation
+            move = self.MAX_ANGULAR
+            next_rotation = move * self.update_delay
+            if next_rotation > diff:
+                move = diff * self.update_delay
+                next_rotation = diff
+            self._cur_angular = move
+            self._cur_linear = self.MIN_LINEAR
+            self._rotation += next_rotation
+        elif self._location != self._target_location:
+            diff = self._target_location - self._location
+            move = self.MAX_LINEAR
+            next_movement = diff.normalized * move * self.update_delay
+            if next_movement.dist > diff.dist:
+                move = diff.dist * self.update_delay
+                next_movement = diff
+            self._cur_angular = self.MIN_ANGULAR
+            self._cur_linear = move
+            self._location += next_movement
+        else:
+            self._cur_angular = self.MIN_ANGULAR
+            self._cur_linear = self.MIN_LINEAR
+            self.__log_change_state(self._cur_state, self.STATE_FOLLOW_WALL)
+            self._cur_state = self.STATE_FOLLOW_WALL
 
     def __follow_wall(self):
-        pass
+        best_wall = self.__get_closer_wall(self.__get_walls())
+        self.__reset_location_and_rotation()
+        self.get_logger().info(f'Follow wall! best_wall {best_wall}')
+        exit(1)
+        # TODO Search for farther safe point
 
     def __publish(self):
         twist = Twist()
