@@ -28,7 +28,7 @@ def get_position(angle, dist):
 
 
 def get_angle(direction):
-    return math.degrees(np.arccos(np.dot([1, 0], direction.to_array()))) * get_sign(direction.y)
+    return math.degrees(np.arccos(np.dot([1, 0], direction.normalized.to_array()))) * get_sign(direction.y)
 
 
 def rotate_vector(vector, angle):
@@ -208,47 +208,76 @@ class WallFollower(Node):
                 return True
         return False
 
-    def are_same_wall(self, direction, last_angles):
-        angle = get_angle(direction)
-        if len(last_angles) and (min(last_angles) > angle or max(last_angles) < angle):
+    def are_same_wall(self, angle, angle_from_begin, angles, angles_from_begin):
+        angles_mean = np.array(angles).mean()
+        angles_from_begin_mean = np.array(angles_from_begin).mean()
+        angle_diff = abs(angle) - abs(angles_mean)
+        angle_from_begin_diff = angle_from_begin - angles_from_begin_mean
+        # self.get_logger().info(f'\nAngle: {angle}\nAngle from begin: {angle_from_begin}\nAngles mean: {angles_mean}\nAngles from begin mean: {angles_from_begin_mean}\nAngle diff: {angle_diff}\nAngle from begin diff: {angle_from_begin_diff}\n')
+        if abs(angle_diff) > 70:
+            self.get_logger().info(f'NEXT WALL?')
             return False
         return True
+
+    def __search_for_corner(self, points, index, angles, angles_from_begin):
+        point = points[index]
+        last_point = points[index - 1]
+        angle = get_angle(point - last_point)
+        angle_from_begin = get_angle(point - points[0])
+        if len(angles):
+            if not self.are_same_wall(angle, angle_from_begin, angles, angles_from_begin):
+                return True
+        angles.append(abs(angle))
+        angles_from_begin.append(angle_from_begin)
+        return False
+
+    def __get_next_wall(self, points):
+        index = 0
+        angles = []
+        angles_from_begin = []
+        while index < len(points) - 1:
+            if index > 0 and self.__search_for_corner(points, index, angles, angles_from_begin):
+                break
+            index += 1
+        return Wall(points[0], points[index]), index + 1
 
     def __interpret_suit_of_points(self, points):
         if len(points) == 1:
             return points
         walls = []
-        angles = []
         begin_index = 0
         while begin_index < len(points):
-            begin_index += 1
-        exit(1)
-        for index, point in enumerate(points[1:]):
-            cur_angle = get_angle((point - points[index]).normalized)
-            angles.append(abs(cur_angle))
-            angles_diff = abs(np.array(angles).mean() - abs(cur_angle))
-            self.get_logger().info(f'{cur_angle} - {np.array(angles).mean()} - {angles_diff}')
-            if angles_diff > 50:
-                self.get_logger().info(f'Big angle diff ({index}) -> {angles_diff} - {np.array(angles).mean()}')
-                ok, not_ok = 0, 0
-                for i, p in enumerate(points[index+2:index+7]):
-                    a = abs(np.array(angles).mean() - abs(get_angle((p - points[index+1+i]).normalized)))
-                    self.get_logger().info(f'Projection -> {a}')
-                    if a > 50:
-                        not_ok += 1
-                    else:
-                        ok += 1
-                self.get_logger().info(f'END Projection -> ok: {ok} - not_ok: {not_ok}')
-                if not_ok > ok:
-                    self.get_logger().info(f'WALL FOUND')
-                    walls.append(Wall(points[begin_index], point))
-                    begin_index = index + 2
-                    angles.clear()
-                    angles.append(abs(cur_angle))
-        if begin_index < len(points):
-            walls.append(Wall(points[begin_index], points[-1]))
-        self.get_logger().info(f'Walls count: {len(walls)}\n{walls}')
-        exit(1)
+            next_wall, point_count = self.__get_next_wall(points[begin_index:])
+            begin_index += point_count
+            walls.append(next_wall)
+        self.get_logger().info(f'WALLS COUNT {len(walls)}')
+        return walls
+        # for index, point in enumerate(points[1:]):
+        #     cur_angle = get_angle((point - points[index]).normalized)
+        #     angles.append(abs(cur_angle))
+        #     angles_diff = abs(np.array(angles).mean() - abs(cur_angle))
+        #     self.get_logger().info(f'{cur_angle} - {np.array(angles).mean()} - {angles_diff}')
+        #     if angles_diff > 50:
+        #         self.get_logger().info(f'Big angle diff ({index}) -> {angles_diff} - {np.array(angles).mean()}')
+        #         ok, not_ok = 0, 0
+        #         for i, p in enumerate(points[index+2:index+7]):
+        #             a = abs(np.array(angles).mean() - abs(get_angle((p - points[index+1+i]).normalized)))
+        #             self.get_logger().info(f'Projection -> {a}')
+        #             if a > 50:
+        #                 not_ok += 1
+        #             else:
+        #                 ok += 1
+        #         self.get_logger().info(f'END Projection -> ok: {ok} - not_ok: {not_ok}')
+        #         if not_ok > ok:
+        #             self.get_logger().info(f'WALL FOUND')
+        #             walls.append(Wall(points[begin_index], point))
+        #             begin_index = index + 2
+        #             angles.clear()
+        #             angles.append(abs(cur_angle))
+        # if begin_index < len(points):
+        #     walls.append(Wall(points[begin_index], points[-1]))
+        # self.get_logger().info(f'Walls count: {len(walls)}\n{walls}')
+        # exit(1)
             # direction = (point - points[begin_index]).normalized
         #
         #     if last_direction is not None and not are_close_directions(direction, last_direction,
@@ -309,9 +338,9 @@ class WallFollower(Node):
     def __search_for_wall(self):
         walls = self.__get_walls()
         self.get_logger().info(f'Walls count: {len(walls)}')
-        for w in walls:
-            self.get_logger().info(f'Walls : {w}')
-        exit(1)
+        # for w in walls:
+        #     self.get_logger().info(f'Walls : {w}')
+        # exit(1)
         best_wall = self.__get_longer_wall(walls)
         self._cur_linear = self.MAX_LINEAR
         self._cur_angular = self.MAX_ANGULAR
