@@ -3,155 +3,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-import math
-import numpy as np
-
-
-def get_closest_range_index(ranges):
-    min_index = 0
-    min_range = ranges[min_index]
-    for index, r in enumerate(ranges[1:]):
-        if r < min_range:
-            min_range = r
-            min_index = index
-    return min_index
-
-
-def get_sign(a):
-    return -1 if a < 0 else 1
-
-
-def get_position(angle, dist):
-    x = math.cos(math.radians(angle)) * dist
-    y = math.sin(math.radians(angle)) * dist
-    return Point(x, y)
-
-
-def get_angle(direction):
-    return math.degrees(np.arccos(np.dot([1, 0], direction.normalized.to_array()))) * get_sign(direction.y)
-
-
-def rotate_vector(vector, angle):
-    radian = math.radians(angle)
-    cos = math.cos(radian)
-    sin = math.sin(radian)
-    x = vector.x * cos + vector.y * sin
-    y = vector.x * -sin + vector.y * cos
-    return Point(x, y)
-
-
-def are_close_directions(direction, last_direction, dist, self=None, angles_diffs=[]) -> bool:
-    direction_angle = get_angle(direction)
-    last_direction_angle = get_angle(last_direction)
-    if self and len(angles_diffs) and (max(angles_diffs) < direction_angle or min(angles_diffs) > direction_angle):
-        self.get_logger().info(f'New extemity')
-    angles_diffs.append(direction_angle)
-    if self:
-        self.get_logger().info(f'AreClose: {direction_angle}, {last_direction_angle}, {abs(direction_angle) - abs(last_direction_angle)}, {dist}')
-        self.get_logger().info(f'Angle diffs mean {np.array(angles_diffs).mean()}')
-    if abs(abs(direction_angle) - abs(last_direction_angle)) < 0.5 if dist > 2 else 8:
-        return True
-    return False
-
-
-def get_intersection(first_point, first_direction, second_point, second_direction):
-    a1 = first_direction.x / first_direction.y
-    b1 = -first_point.x / first_direction.x
-    a2 = second_direction.x / second_direction.y
-    b2 = -second_point.x / second_direction.x
-    x = (b2 - b1) / (a1 - a2)
-    return Point((b2 - b1) / (a1 - a2), a1 * x + b1)
-
-
-class Point:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __add__(self, other):
-        return Point(self.x + other.x, self.y + other.y)
-
-    def __sub__(self, other):
-        return Point(self.x - other.x, self.y - other.y)
-
-    def __mul__(self, other):
-        if isinstance(other, (int, float)):
-            return Point(self.x * other, self.y * other)
-        return Point(self.x * other.x, self.y * other.y)
-
-    def __truediv__(self, other):
-        if isinstance(other, (int, float)):
-            return Point(self.x / other, self.y / other)
-        return Point(self.x / other.x, self.y / other.y)
-
-    def __eq__(self, other):
-        return self.x == other.x and self.y == other.y
-
-    def __str__(self):
-        return f'Point<x: {self.x}, y: {self.y}>'
-
-    def __repr__(self):
-        return str(self)
-
-    @property
-    def normalized(self):
-        normalizer = self.dist
-        if normalizer == 0:
-            return Point(0, 0)
-        return Point(self.x / normalizer, self.y / normalizer)
-
-    @property
-    def dist(self):
-        return math.sqrt(self.x ** 2 + self.y ** 2)
-
-    def to_array(self) -> list:
-        return [self.x, self.y]
-
-    def rotate(self, angle):
-        new_point = rotate_vector(self, angle)
-        self.x = new_point.x
-        self.y = new_point.y
-
-
-class Wall:
-    def __init__(self, begin_point, end_point):
-        self._begin_point = begin_point
-        self._end_point = end_point
-
-    def __str__(self):
-        return f'Wall<begin_point: {self.begin_point}, end_point: {self.end_point}, dist: {self.dist}>'
-
-    def __repr__(self):
-        return str(self)
-
-    @property
-    def begin_point(self):
-        return self._begin_point
-
-    @property
-    def end_point(self):
-        return self._end_point
-
-    @property
-    def dist(self):
-        return (self.end_point - self.begin_point).dist
-
-    @property
-    def direction(self):
-        return (self.end_point - self.begin_point).normalized
-
-    @property
-    def middle(self):
-        return self.begin_point + self.direction * (self.dist / 2)
-
-    def dist_to_origin(self) -> float:
-        return get_intersection(Point(0, 0), Point(0, 1), self.begin_point, self.direction).dist
-        # lambda_s = (self.begin_point.dist * self.end_point.dist) / (self.dist ** 2)
-        # if lambda_s >= 1:
-        #     return self.end_point.dist
-        # elif lambda_s <= 0:
-        #     return self.begin_point.dist
-        # return (self.begin_point + (self.direction * lambda_s)).dist
+from tools import *
+from Shapes.point import Point, rotate_vector
+from Shapes.wall import Wall
 
 
 class WallFollower(Node):
@@ -183,7 +37,7 @@ class WallFollower(Node):
         self.update_timer = self.create_timer(self.update_delay, self.update_callback)
 
         """ Private attributes """
-        self._current_ranges = None
+        self._current_ranges = DataBuffer()
         self._location = None
         self._rotation = None
         self._target_location = None
@@ -193,6 +47,10 @@ class WallFollower(Node):
         self._cur_state = self.STATE_SEARCH_WALL
 
         self._safety_distance = 0.3
+
+    @property
+    def info(self):
+        return self.get_logger().info
 
     def __reset_location_and_rotation(self):
         self._location = Point(0, 0)
@@ -211,10 +69,7 @@ class WallFollower(Node):
 
     def are_same_wall(self, angle, angle_from_begin, angles, angles_from_begin):
         angles_mean = np.array(angles).mean()
-        angles_from_begin_mean = np.array(angles_from_begin).mean()
         angle_diff = abs(angle) - abs(angles_mean)
-        angle_from_begin_diff = angle_from_begin - angles_from_begin_mean
-        # self.get_logger().info(f'\nAngle: {angle}\nAngle from begin: {angle_from_begin}\nAngles mean: {angles_mean}\nAngles from begin mean: {angles_from_begin_mean}\nAngle diff: {angle_diff}\nAngle from begin diff: {angle_from_begin_diff}\n')
         if abs(angle_diff) > 70:
             self.get_logger().info(f'NEXT WALL?')
             return False
@@ -314,35 +169,34 @@ class WallFollower(Node):
         return longer_wall
 
     @staticmethod
-    def __get_closer_wall(walls):
+    def __get_closer_wall(walls) -> Wall:
         closer_wall = None
         for wall in walls:
-            if closer_wall is None or closer_wall.dist_to_origin() > wall.dist_to_origin():
+            if closer_wall is None or closer_wall.closer_dist_from_origin() > wall.closer_dist_from_origin():
                 closer_wall = wall
         return closer_wall
 
     def __search_for_wall(self):
+        self._cur_linear = self.MIN_LINEAR
+        self._cur_angular = self.MIN_ANGULAR
+        if self._current_ranges.length < self._current_ranges.max_size:
+            return
         walls = self.__get_walls()
-        for w in walls:
-            self.get_logger().info(f'Wall: {w} -- {w.dist_to_origin()}')
-        exit(1)
         best_wall = self.__get_closer_wall(walls)
-        self._cur_linear = self.MAX_LINEAR
-        self._cur_angular = self.MAX_ANGULAR
         self.__reset_location_and_rotation()
-        self._target_location = best_wall.middle + rotate_vector(best_wall.direction, -90) * self._safety_distance
+        self._target_location = best_wall.closer_point_from_origin() + (rotate_vector(best_wall.direction, -90) * self._safety_distance)
         self._target_rotation = math.radians(get_angle(self._target_location.normalized))
         self.__log_change_state(self._cur_state, self.STATE_MOVE_TO_WALL)
         self._cur_state = self.STATE_MOVE_TO_WALL
 
     def __move_to_wall(self):
         if self._rotation != self._target_rotation:
-            diff = self._target_rotation - self._rotation
-            move = self.MAX_ANGULAR
+            diff = abs(self._target_rotation - self._rotation)
+            move = self.MAX_ANGULAR * get_sign(self._target_rotation)
             next_rotation = move * self.update_delay
-            if next_rotation > diff:
-                move = diff * self.update_delay
-                next_rotation = diff
+            if abs(next_rotation) > diff:
+                move = diff * self.update_delay * get_sign(self._target_rotation)
+                next_rotation = diff * get_sign(self._target_rotation)
             self._cur_angular = move
             self._cur_linear = self.MIN_LINEAR
             self._rotation += next_rotation
@@ -361,12 +215,9 @@ class WallFollower(Node):
             self._cur_linear = self.MIN_LINEAR
             self.__log_change_state(self._cur_state, self.STATE_FOLLOW_WALL)
             self._cur_state = self.STATE_FOLLOW_WALL
+            self._current_ranges.clear()
 
-    def __follow_wall(self):
-        walls = self.__get_walls()
-        self.get_logger().info(f'Walls count: {len(walls)}')
-        best_wall = self.__get_closer_wall(walls)
-        self.__reset_location_and_rotation()
+    def __find_next_point(self, best_wall: Wall, walls: list):
         best_angle = get_angle(best_wall.direction)
         rotated_begin_point = rotate_vector(best_wall.begin_point, best_angle)
         rotated_end_point = rotate_vector(best_wall.end_point, best_angle)
@@ -379,11 +230,44 @@ class WallFollower(Node):
         if next_point.dist > 8:
             next_point = next_point.normalized * 8
         for wall in (w for w in walls if w != best_wall):
-            intersection = get_intersection(Point(0, 0), best_wall.direction.normalized, wall.begin_point, wall.direction)
-            self.get_logger().info(f'Intersection {intersection}')
-            self.get_logger().info(f'intersec dist: {(intersection - wall.begin_point).dist} -- wall dist: {wall.dist}')
-            if (intersection - wall.begin_point).dist < wall.dist:
-                self.get_logger().info(f'Intersection point on wall')
+            intersection = get_intersection(Point.zero(), best_wall.direction.normalized, wall.begin_point,
+                                            wall.direction)
+            if next_point.dist + self._safety_distance > intersection.dist:
+                return self.__find_next_point(wall, [w for w in walls if w != best_wall])
+        return next_point
+
+    def __follow_wall(self):
+        self._cur_linear = self.MIN_LINEAR
+        self._cur_angular = self.MIN_ANGULAR
+        if self._current_ranges.length < self._current_ranges.max_size:
+            return
+        self.__reset_location_and_rotation()
+        walls = self.__get_walls()
+        self.get_logger().info(f'Walls count: {len(walls)}')
+        best_wall = self.__get_closer_wall(walls)
+
+        next_point = self.__find_next_point(best_wall, walls)
+
+        # best_angle = get_angle(best_wall.direction)
+        # rotated_begin_point = rotate_vector(best_wall.begin_point, best_angle)
+        # rotated_end_point = rotate_vector(best_wall.end_point, best_angle)
+        # if rotated_begin_point.x > rotated_end_point.x:
+        #     best_wall_extremity = best_wall.begin_point
+        # else:
+        #     best_wall_extremity = best_wall.end_point
+        # best_direction = rotate_vector(best_wall.direction, -90)
+        # next_point = best_wall_extremity + (best_direction * self._safety_distance)
+        # if next_point.dist > 8:
+        #     next_point = next_point.normalized * 8
+        # for wall in (w for w in walls if w != best_wall):
+        #     intersection = get_intersection(Point.zero(), best_wall.direction.normalized, wall.begin_point, wall.direction)
+        #     if next_point.dist + self._safety_distance > intersection.dist:
+        #         self.info("Tu vas te prendre un mur?")
+        #         # TODO Split la fonction, fait en une qui prend le best wall et qui calcule le point, si on arrive ici tu lance la recursive avec wall toucher comme best wall et ainsi de suite mouhahaha
+        #         next_point = next_point.normalized * (intersection.dist - self._safety_distance)
+        #         break
+
+
         self.get_logger().info(f'NEXT POINT {next_point}')
         self._target_location = next_point
         self._target_rotation = math.radians(get_angle(self._target_location.normalized))
@@ -397,11 +281,12 @@ class WallFollower(Node):
         self.publisher.publish(twist)
 
     def scan_sensor_callback(self, sensor_data):
-        self._current_ranges = sensor_data.ranges
+        # self.info(f'{sensor_data}')
+        self._current_ranges.append(sensor_data.ranges)
 
     def odom_callback(self, odometry):
-        return
         # self.get_logger().info(f'CMD VEL ROW -> {odometry}')
+        return
 
     def update_callback(self):
         if self._current_ranges is not None:
