@@ -234,6 +234,11 @@ class WallFollower(Node):
                                             wall.direction)
             if next_point.dist + self._safety_distance > intersection.dist:
                 return self.__find_next_point(wall, [w for w in walls if w != best_wall])
+        if next_point.dist < 0.1:
+            self.info(f'Next point to close: {next_point.dist}')
+            next_point = best_wall.end_point + (best_wall.direction * self._safety_distance)
+        else:
+            self.info(f'Next point: {next_point.dist}')
         return next_point
 
     def __follow_wall(self):
@@ -245,29 +250,7 @@ class WallFollower(Node):
         walls = self.__get_walls()
         self.get_logger().info(f'Walls count: {len(walls)}')
         best_wall = self.__get_closer_wall(walls)
-
         next_point = self.__find_next_point(best_wall, walls)
-
-        # best_angle = get_angle(best_wall.direction)
-        # rotated_begin_point = rotate_vector(best_wall.begin_point, best_angle)
-        # rotated_end_point = rotate_vector(best_wall.end_point, best_angle)
-        # if rotated_begin_point.x > rotated_end_point.x:
-        #     best_wall_extremity = best_wall.begin_point
-        # else:
-        #     best_wall_extremity = best_wall.end_point
-        # best_direction = rotate_vector(best_wall.direction, -90)
-        # next_point = best_wall_extremity + (best_direction * self._safety_distance)
-        # if next_point.dist > 8:
-        #     next_point = next_point.normalized * 8
-        # for wall in (w for w in walls if w != best_wall):
-        #     intersection = get_intersection(Point.zero(), best_wall.direction.normalized, wall.begin_point, wall.direction)
-        #     if next_point.dist + self._safety_distance > intersection.dist:
-        #         self.info("Tu vas te prendre un mur?")
-        #         # TODO Split la fonction, fait en une qui prend le best wall et qui calcule le point, si on arrive ici tu lance la recursive avec wall toucher comme best wall et ainsi de suite mouhahaha
-        #         next_point = next_point.normalized * (intersection.dist - self._safety_distance)
-        #         break
-
-
         self.get_logger().info(f'NEXT POINT {next_point}')
         self._target_location = next_point
         self._target_rotation = math.radians(get_angle(self._target_location.normalized))
