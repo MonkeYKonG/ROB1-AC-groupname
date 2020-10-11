@@ -3,7 +3,7 @@ from launch.actions import ExecuteProcess
 
 
 def generate_launch_description():
-    world = 'src/labrob/worlds/challenge_maze.burger.world'
+    world = 'src/worlds/blackfoot_world/worlds/challenge_maze.burger.world'
 
     return LaunchDescription([
         ExecuteProcess(
