@@ -47,9 +47,9 @@ class WallFollower(Node):
         self._cur_angular = self.MIN_ANGULAR
         self._cur_state = self.STATE_SEARCH_WALL
         # self._cur_state = self.STATE_TEST_DEPLACEMENT
-        self._last_best_wall_direction = None
 
         self._safety_distance = 0.3
+        self.last_odom_twist = None
 
     @property
     def info(self):
@@ -185,10 +185,6 @@ class WallFollower(Node):
         if self._current_ranges.length < self._current_ranges.max_size:
             return
         walls = self.__get_walls()
-        self.info(f'Found {len(walls)} walls.')
-        for w in walls:
-            self.info(f'{w.closer_dist_from_origin()}')
-        # exit(1)
         best_wall = self.__get_closer_wall(walls)
         self.__reset_location_and_rotation()
         self._target_location = best_wall.closer_point_from_origin() + (rotate_vector(best_wall.direction, -90) * self._safety_distance)
@@ -198,7 +194,6 @@ class WallFollower(Node):
 
     def __move_to_wall(self):
         if self._rotation != self._target_rotation:
-            # self.info(f'ROTATE -- {self._cur_linear} -- {self._cur_angular}')
             diff = abs(self._target_rotation - self._rotation)
             move = self.MAX_ANGULAR * get_sign(self._target_rotation)
             next_rotation = move * self.update_delay
@@ -209,7 +204,6 @@ class WallFollower(Node):
             self._cur_linear = self.MIN_LINEAR
             self._rotation += next_rotation
         elif self._location != self._target_location:
-            # self.info(f'GO FORWARD -- {self._cur_linear} -- {self._cur_angular}')
             diff = self._target_location - self._location
             move = self.MAX_LINEAR
             next_movement = diff.normalized * move * self.update_delay
@@ -220,7 +214,6 @@ class WallFollower(Node):
             self._cur_linear = move
             self._location += next_movement
         else:
-            # self.info(f'FINISH! -- {self._cur_linear} -- {self._cur_angular}')
             self._cur_angular = self.MIN_ANGULAR
             self._cur_linear = self.MIN_LINEAR
             self.__log_change_state(self._cur_state, self.STATE_FOLLOW_WALL)
@@ -250,16 +243,10 @@ class WallFollower(Node):
                 angles_diff = 360 - angles_diff
             from_begin_dist = (intersection - wall.begin_point).dist
             from_end_dist = (intersection - wall.end_point).dist
-            self.info(f'{intersection_angle} -- {next_point_angle} -- {angles_diff} -- {from_begin_dist} -- {from_end_dist}')
             if next_point.dist + self._safety_distance > intersection.dist and angles_diff < 45 and from_begin_dist < wall.dist and from_end_dist < wall.dist:
-                self.info(f'Need recusrivity {wall} -- {intersection} -- {(intersection - wall.begin_point).dist} -- {(intersection - wall.end_point).dist}\n-- {(next_point - intersection).dist} -- {get_angle(next_point)} -- {get_angle(intersection)}')
                 return self.__find_next_point(wall, [w for w in walls if w != best_wall])
         if next_point.dist < 0.1:
-            self.info(f'Next point to close: {next_point.dist}')
             next_point = best_wall.end_point + (rotate_vector(best_wall.direction, 30) * self._safety_distance)
-            self._last_best_wall_direction = best_wall.direction
-        else:
-            self.info(f'Next point: {next_point.dist}')
         return next_point
 
     def __follow_wall(self):
@@ -291,20 +278,16 @@ class WallFollower(Node):
 
     def __publish(self):
         twist = Twist()
-        twist.linear.x = self._cur_linear
-        twist.angular.z = self._cur_angular
-        # self.info(f'{twist}')
+        twist.linear.x = self._cur_linear if self._cur_linear != 0.0 else -self.last_odom_twist.linear.x
+        twist.linear.y = -self.last_odom_twist.linear.y
+        twist.angular.z = self._cur_angular if self._cur_linear != 0.0 else -self.last_odom_twist.angular.z
         self.publisher.publish(twist)
 
     def scan_sensor_callback(self, sensor_data):
-        # self.info(f'{sensor_data}')
         self._current_ranges.append(sensor_data.ranges)
 
     def odom_callback(self, odometry):
-        twist = odometry.twist.twist
-        linear = twist.linear
-        angular = twist.angular
-        # self.get_logger().info(f'ODOM\n{linear.x} -- {linear.y}\n{angular.z}')
+        self.last_odom_twist = odometry.twist.twist
         return
 
     def update_callback(self):
