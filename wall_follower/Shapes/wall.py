@@ -1,5 +1,64 @@
 from Shapes.point import Point, rotate_vector
-from tools import get_intersection, get_angle
+from tools import get_intersection, get_angle, get_angles_diff, get_position, DataBuffer
+
+
+def interpret_points_sequence(points):
+    if len(points) == 0:
+        return []
+    if len(points) < 3:
+        return [Wall(points[0], points[-1])]
+    middle_index = len(points) // 2
+    begin_point = points[0]
+    middle_point = points[middle_index]
+    end_point = points[-1]
+    diff = get_angles_diff(get_angle(middle_point - begin_point), get_angle(end_point - middle_point))
+    if abs(diff) > 10:
+        first_part_walls = interpret_points_sequence(points[:middle_index])
+        second_part_walls = interpret_points_sequence(points[middle_index:])
+        return first_part_walls + second_part_walls
+    return [Wall(begin_point, end_point)]
+
+
+def get_points_sequences(ranges: DataBuffer) -> list:
+    sequences = []
+    cur_suit = []
+    for index, r in enumerate(ranges):
+        if r > 12:
+            if len(cur_suit):
+                sequences.append(cur_suit)
+                cur_suit = []
+            continue
+        position = get_position(index, r)
+        cur_suit.append((index, Point(position.x, position.y)))
+    if len(cur_suit):
+        if len(sequences) and sequences[0][0][0] == 0:
+            sequences[0] = cur_suit + sequences[0]
+        else:
+            sequences.append(cur_suit)
+    return [[t[1] for t in s] for s in sequences]
+
+
+def join_walls(walls: list) -> list:
+    joined_walls = []
+    cur_wall = walls.pop(0)
+    while len(walls):
+        wall = walls.pop(0)
+        diff = get_angles_diff(get_angle(cur_wall.direction), get_angle(wall.direction))
+        if cur_wall.begin_point == cur_wall.end_point or wall.begin_point == wall.end_point or diff < 45:
+            cur_wall = Wall(cur_wall.begin_point, wall.end_point)
+        else:
+            joined_walls.append(cur_wall)
+            cur_wall = wall
+    joined_walls.append(cur_wall)
+    return joined_walls
+
+
+def get_walls(ranges: DataBuffer) -> list:
+    points_sequence = get_points_sequences(ranges)
+    walls = []
+    for points in points_sequence:
+        walls += join_walls(interpret_points_sequence(points))
+    return walls
 
 
 class Wall:
@@ -30,8 +89,12 @@ class Wall:
         return (self.end_point - self.begin_point).normalized
 
     @property
+    def perpendicular_direction(self):
+        return rotate_vector(self.direction, -90)
+
+    @property
     def middle(self):
-        return self.begin_point + self.direction * (self.dist / 2)
+        return self.begin_point + (self.direction * (self.dist / 2))
 
     def closer_point_from_origin(self) -> Point:
         closer_point_on_line = get_intersection(Point.zero(), rotate_vector(self.direction, 90), self.begin_point,
@@ -47,3 +110,17 @@ class Wall:
 
     def closer_dist_from_origin(self) -> float:
         return self.closer_point_from_origin().dist
+
+    def get_target_extremity(self) -> Point:
+        best_angle = get_angle(self.direction)
+        rotated_begin_point = rotate_vector(self.begin_point, best_angle)
+        rotated_end_point = rotate_vector(self.end_point, best_angle)
+        if rotated_begin_point.x > rotated_end_point.x:
+            return self.begin_point
+        else:
+            return self.end_point
+
+    def intersect(self, point: Point) -> bool:
+        from_begin_dist = (self.begin_point - point).dist
+        from_end_dist = (self.end_point - point).dist
+        return from_begin_dist < self.dist and from_end_dist < self.dist

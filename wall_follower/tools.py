@@ -50,6 +50,13 @@ def get_intersection(first_point, first_direction, second_point, second_directio
     return Point(x, a1 * x + b1)
 
 
+def get_angles_diff(first_angle, second_angle):
+    max_angle = max(first_angle, second_angle)
+    min_angle = min(first_angle, second_angle)
+    diff = abs(max_angle - min_angle)
+    return diff if diff < 180 else 360 - diff
+
+
 class DataBuffer:
     def __init__(self, max_size=10):
         self.max_size = max_size
