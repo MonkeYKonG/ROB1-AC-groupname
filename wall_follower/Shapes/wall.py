@@ -11,8 +11,12 @@ def interpret_points_sequence(points):
     begin_point = points[0]
     middle_point = points[middle_index]
     end_point = points[-1]
-    diff = get_angles_diff(get_angle(middle_point - begin_point), get_angle(end_point - middle_point))
-    if abs(diff) > 10:
+    first_part_vector = middle_point - begin_point
+    second_part_vector = end_point - middle_point
+    first_part_variance = get_angle(Point(first_part_vector.dist, 0.01))
+    second_part_variance = get_angle(Point(second_part_vector.dist, 0.01))
+    diff = get_angles_diff(get_angle(first_part_vector), get_angle(second_part_vector))
+    if abs(diff) > first_part_variance + second_part_variance:
         first_part_walls = interpret_points_sequence(points[:middle_index])
         second_part_walls = interpret_points_sequence(points[middle_index:])
         return first_part_walls + second_part_walls
@@ -44,7 +48,9 @@ def join_walls(walls: list) -> list:
     while len(walls):
         wall = walls.pop(0)
         diff = get_angles_diff(get_angle(cur_wall.direction), get_angle(wall.direction))
-        if cur_wall.begin_point == cur_wall.end_point or wall.begin_point == wall.end_point or diff < 45:
+        cur_wall_angle_variance = get_angle(Point(cur_wall.dist, 0.01))
+        wall_angle_variance = get_angle(Point(wall.dist, 0.01))
+        if cur_wall.begin_point == cur_wall.end_point or wall.begin_point == wall.end_point or diff < (cur_wall_angle_variance + wall_angle_variance) * 2:
             cur_wall = Wall(cur_wall.begin_point, wall.end_point)
         else:
             joined_walls.append(cur_wall)
@@ -58,7 +64,7 @@ def get_walls(ranges: DataBuffer) -> list:
     walls = []
     for points in points_sequence:
         walls += join_walls(interpret_points_sequence(points))
-    return walls
+    return [w for w in walls if w.dist > 0.1]
 
 
 class Wall:
@@ -67,7 +73,7 @@ class Wall:
         self._end_point = end_point
 
     def __str__(self):
-        return f'Wall<begin_point: {self.begin_point}, end_point: {self.end_point}, dist: {self.dist}>'
+        return f'Wall<begin_point: {self.begin_point}, end_point: {self.end_point}, dist: {self.dist}, angle: {get_angle(self.direction)}>'
 
     def __repr__(self):
         return str(self)
