@@ -1,0 +1,8 @@
+version: "3.3"
+
+services:
+  local:
+    build:
+      context: .
+    tty: true
+    stdin_open: true

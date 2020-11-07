@@ -3,6 +3,7 @@ import os
 from glob import glob
 
 package_name = 'wall_follower'
+package_name_share_directory = os.path.join('share', package_name)
 
 setup(
     name=package_name,
@@ -12,9 +13,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name), glob('launch/*.launch.py')),
-        (os.path.join('share', package_name), glob('Shapes/*.py')),
-        (os.path.join('share', package_name), glob('tools.py')),
+        (os.path.join(package_name_share_directory, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join(package_name_share_directory, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -25,7 +25,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'wall_follower = wall_follower.wall_follower:main'
+            'wall_follower = wall_follower.wall_follower:main',
+            'nav2_wall_follower = wall_follower.nav2_wall_follower:main',
         ],
     },
 )

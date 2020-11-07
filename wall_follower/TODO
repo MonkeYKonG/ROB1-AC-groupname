@@ -1,0 +1,15 @@
+PACKAGE ORGANISATION:
+
+Use personal config files
+remove resource folder if not used
+documenting yourself about tests
+better organize wall_folower python package
+Cleanify package.xml and config files
+
+
+FUNCTIONAL:
+
+Correct goal point direction
+Search a way to detect end of movements
+Optimize next point finder algorithm
+Search a way to travel on long path maze

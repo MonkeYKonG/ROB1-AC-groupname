@@ -1,5 +1,5 @@
 import math
-from Shapes.point import Point
+from wall_follower.Shapes.point import Point
 import numpy as np
 
 

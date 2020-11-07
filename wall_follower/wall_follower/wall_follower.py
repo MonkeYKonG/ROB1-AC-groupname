@@ -3,9 +3,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from tools import *
-from Shapes.point import Point, rotate_vector
-from Shapes.wall import Wall, get_walls
+from wall_follower.tools import *
+from wall_follower.Shapes.point import Point, rotate_vector
+from wall_follower.Shapes.wall import Wall, get_walls
 
 
 class WallFollower(Node):

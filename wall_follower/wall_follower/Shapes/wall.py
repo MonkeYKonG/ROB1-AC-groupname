@@ -1,5 +1,5 @@
-from Shapes.point import Point, rotate_vector
-from tools import get_intersection, get_angle, get_angles_diff, get_position, DataBuffer
+from wall_follower.Shapes.point import Point, rotate_vector
+from wall_follower.tools import get_intersection, get_angle, get_angles_diff, get_position, DataBuffer
 
 
 def interpret_points_sequence(points):
