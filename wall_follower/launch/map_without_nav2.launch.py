@@ -6,6 +6,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import ThisLaunchFileDir
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -23,8 +24,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([ThisLaunchFileDir(), 'start_cartographer.launch.py']),
-            launch_argument={
+            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/start_cartographer.launch.py']),
+            launch_arguments={
                 'use_sim_time': use_sim_time,
                 'cartographer_occupancy_grid_dir': cartographer_occupancy_grid_dir,
                 'cartographer_config_dir': cartographer_config_dir,
@@ -32,5 +33,10 @@ def generate_launch_description():
                 'resolution': resolution,
                 'publish_period_sec': publish_period_sec
             }.items()
-        )
+        ),
+        Node(
+            package='wall_follower',
+            executable='wall_follower',
+            name='wall_follower'
+        ),
     ])

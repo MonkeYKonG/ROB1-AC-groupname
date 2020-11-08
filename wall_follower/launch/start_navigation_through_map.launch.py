@@ -16,13 +16,11 @@ def generate_launch_description():
     nav2_launch_file_dir_path = os.path.join(get_package_share_directory('nav2_bringup'), 'launch')
     navigation_param_file_path = os.path.join(
         get_package_share_directory('turtlebot3_navigation2'), 'param', param_file_name)
-    map_dir_path = os.path.join(ThisLaunchFileDir(), 'maps')
-    default_map_name = 'maze.yaml'
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     nav2_launch_file_dir = LaunchConfiguration('navigation_launch_dir', default=nav2_launch_file_dir_path)
     navigation_param_dir = LaunchConfiguration('params', default=navigation_param_file_path)
-    map_file = LaunchDescription('map', default=os.path.join(map_dir_path, default_map_name))
+    map_file = LaunchConfiguration('map')
 
     return LaunchDescription([
         IncludeLaunchDescription(
