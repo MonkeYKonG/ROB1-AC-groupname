@@ -13,7 +13,7 @@ def generate_launch_description():
     param_file_name = TURTLEBOT3_MODEL + '.yaml'
     nav2_launch_file_dir_path = os.path.join(get_package_share_directory('nav2_bringup'), 'launch')
     navigation_param_file_path = os.path.join(
-        get_package_share_directory('turtlebot3_navigation2'), 'param', param_file_name)
+        get_package_share_directory('wall_follower'), 'config', param_file_name)
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     nav2_launch_file_dir = LaunchConfiguration('navigation_launch_dir', default=nav2_launch_file_dir_path)

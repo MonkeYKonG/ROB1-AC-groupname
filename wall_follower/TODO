@@ -1,7 +1,5 @@
 PACKAGE ORGANISATION:
 
-Use personal config files
-remove resource folder if not used
 documenting yourself about tests
 better organize wall_folower python package
 Cleanify package.xml and config files

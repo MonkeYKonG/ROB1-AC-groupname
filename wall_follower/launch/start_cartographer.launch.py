@@ -11,12 +11,13 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 def generate_launch_description():
     turtlebot3_cartographer_prefix = get_package_share_directory('turtlebot3_cartographer')
     turtlebot3_cartographer_launch_dir = os.path.join(turtlebot3_cartographer_prefix, 'launch')
+    wall_follower_share_dir = get_package_share_directory('wall_follower')
+    wall_follower_config_dir = os.path.join(wall_follower_share_dir, 'config')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     cartographer_occupancy_grid_dir = LaunchConfiguration('cartographer_occupancy_grid',
                                                           default=turtlebot3_cartographer_launch_dir)
-    cartographer_config_dir = LaunchConfiguration('cartographer_config_dir', default=os.path.join(
-        turtlebot3_cartographer_prefix, 'config'))
+    cartographer_config_dir = LaunchConfiguration('cartographer_config_dir', default=wall_follower_config_dir)
     configuration_basename = LaunchConfiguration('configuration_basename',
                                                  default='turtlebot3_lds_2d.lua')
     resolution = LaunchConfiguration('resolution', default='0.05')
