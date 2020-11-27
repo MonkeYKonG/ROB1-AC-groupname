@@ -3,6 +3,11 @@ from wall_follower.Shapes.point import Point
 import numpy as np
 
 
+def rotation_vector_to_quaternion(direction_vector: Point) -> Point:
+    angle = (math.atan2(direction_vector.x, direction_vector.y) + ((3 * math.pi) / 2))
+    return Point(math.sin(angle / 2), -math.cos(angle / 2))
+
+
 def get_closest_range_index(ranges):
     min_index = 0
     min_range = ranges[min_index]

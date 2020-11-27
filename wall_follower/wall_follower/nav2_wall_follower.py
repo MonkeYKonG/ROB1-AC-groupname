@@ -5,6 +5,7 @@ from nav_msgs.msg import OccupancyGrid, Odometry
 from geometry_msgs.msg import PoseStamped
 from tf2_msgs.msg import TFMessage
 from .Shapes.point import Point
+from .tools import rotation_vector_to_quaternion
 import math
 
 
@@ -56,8 +57,6 @@ class Nav2WallFollower(Node):
         self.footprint_estimated_location = None
 
     def map_location_to_map_indexes(self, world_location: Point) -> Point:
-        print(int((world_location.x - self.map_origin.x) // self.map_resolution))
-        print(int((world_location.x - self.map_origin.x) // 0.05))
         index_x = int((world_location.x - self.map_origin.x) // self.map_resolution)
         index_y = int((world_location.y - self.map_origin.y) // self.map_resolution)
         return Point(index_x, index_y)
@@ -159,9 +158,7 @@ class Nav2WallFollower(Node):
         angle = (math.atan2(diff.x, diff.y) + 3 * math.pi / 2)
         next_loc.pose.orientation.z = math.sin(angle / 2)
         next_loc.pose.orientation.w = math.cos(angle / 2)
-        print(next_loc.pose.orientation.z, next_loc.pose.orientation.w)
         self.nav2_publisher.publish(next_loc)
-        exit(1)
 
 
 def main(args=None):

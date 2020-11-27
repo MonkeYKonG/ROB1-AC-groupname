@@ -28,6 +28,7 @@ setup(
         'console_scripts': [
             'wall_follower = wall_follower.wall_follower:main',
             'nav2_wall_follower = wall_follower.nav2_wall_follower:main',
+            'test_tools = wall_follower.test:main',
         ],
     },
 )
