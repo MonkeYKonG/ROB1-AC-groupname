@@ -6,6 +6,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import ThisLaunchFileDir
+from launch_ros.actions import Node
 
 
 TURTLEBOT3_MODEL = os.environ.setdefault('TURTLEBOT3_MODEL', 'burger')
@@ -16,6 +17,10 @@ def generate_launch_description():
     nav2_launch_file_dir_path = os.path.join(get_package_share_directory('nav2_bringup'), 'launch')
     navigation_param_file_path = os.path.join(
         get_package_share_directory('turtlebot3_navigation2'), 'param', param_file_name)
+    rviz_config_dir = os.path.join(
+        get_package_share_directory('nav2_bringup'),
+        'rviz',
+        'nav2_default_view.rviz')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     nav2_launch_file_dir = LaunchConfiguration('navigation_launch_dir', default=nav2_launch_file_dir_path)
@@ -29,4 +34,11 @@ def generate_launch_description():
                               'params': navigation_param_dir,
                               'map': map_file}.items(),
         ),
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            arguments=['-d', rviz_config_dir],
+            parameters=[{'use_sim_time': use_sim_time}],
+            output='screen'),
     ])
