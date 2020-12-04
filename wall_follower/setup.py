@@ -1,6 +1,21 @@
 from setuptools import setup
 import os
+import sys
 from glob import glob
+
+
+def get_all_file_paths(base_dir):
+    results = []
+    for file in os.listdir(base_dir):
+        filepath = os.path.join(base_dir, file)
+        if os.path.isfile(filepath):
+            results.append(filepath)
+        else:
+            results += get_all_file_paths(filepath)
+    return results
+
+
+model_paths = get_all_file_paths('models')
 
 package_name = 'wall_follower'
 package_name_share_directory = os.path.join('share', package_name)
@@ -16,6 +31,7 @@ setup(
         (os.path.join(package_name_share_directory, 'launch'), glob('launch/*.launch.py')),
         (os.path.join(package_name_share_directory, 'config'), glob('config/*')),
         (os.path.join(package_name_share_directory, 'worlds'), glob('worlds/*')),
+        *((os.path.join(package_name_share_directory, os.path.dirname(model)), [model]) for model in model_paths),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
